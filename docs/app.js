@@ -43,11 +43,14 @@ function toast(msg) {
 
 /* ================= API ================= */
 async function api(path, body) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
   const res = await fetch(API.replace(/\/$/, "") + path, {
+    signal: ctrl.signal,
     method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", "X-Init-Data": (tg && tg.initData) || "" },
+    headers: { "Content-Type": "application/json", "X-Init-Data": (tg && tg.initData) || "", "ngrok-skip-browser-warning": "1" },
     body: body ? JSON.stringify(body) : undefined,
-  });
+  }).catch((e) => { throw new TypeError(e.name === "AbortError" ? "timeout" : e.message); }).finally(() => clearTimeout(timer));
   let data = {};
   try { data = await res.json(); } catch { /* */ }
   if (!res.ok) throw new Error(data.error || `Ошибка ${res.status}`);
