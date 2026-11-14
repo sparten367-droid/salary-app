@@ -216,7 +216,9 @@ function renderCalendar() {
     <div class="section-title">Периоды выплат</div>
     <div class="list">${mPeriods.map((p) => `<div class="item" data-period="${p.model}|${p.start}"><span class="dot ${p.model}"></span>
       <div class="grow"><div class="t">${esc(name(p.model))} · ${dm(p.start)}–${dm(p.end)}</div><div class="s">${p.shifts} ${plural(p.shifts, "смена", "смены", "смен")} · продажи ${money(p.sales)}</div></div>
-      <div class="right"><div class="mid">${money(p.pay)}</div>${statusTag(p)}</div></div>`).join("") || `<div class="item"><div class="s">Нет периодов</div></div>`}</div>`;
+      <div class="right"><div class="mid">${money(p.pay)}</div>${statusTag(p)}</div></div>`).join("") || `<div class="item"><div class="s">Нет периодов</div></div>`}</div>
+    <button class="btn secondary" id="cal-report">🧾 Отчёт ${esc(name("m1"))} за ${MONTHS[Number(key.slice(5)) - 1]} в чат</button>`;
+  $("#cal-report").onclick = () => sendOwnerReport(key);
   $("#pm").onclick = () => { calMonth = shiftMonth(key, -1); render(); };
   $("#nm").onclick = () => { calMonth = shiftMonth(key, 1); render(); };
   document.querySelectorAll("[data-day]").forEach((c) => (c.onclick = () => { haptic(); daySheet(c.dataset.day); }));
@@ -387,7 +389,8 @@ function renderMore() {
       <div class="item" id="names"><span>✏️</span><div class="grow"><div class="t">Названия моделей</div><div class="s">${esc(name("m1"))}, ${esc(name("m2"))}</div></div><span class="muted">›</span></div>
       <div class="item" id="uah-toggle"><span>₴</span><div class="grow"><div class="t">Показывать в гривнах</div><div class="s">${S.uah ? `курс НБУ: ${S.uah} ₴ за $1` : "курс сейчас недоступен"}</div></div>
         <input type="checkbox" ${prefs.uah ? "checked" : ""} style="width:22px;height:22px;pointer-events:none"></div>
-      <div class="item" id="excel"><span>📁</span><div class="grow"><div class="t">Excel-таблица в чат</div><div class="s">Все смены, выплаты и месяцы</div></div></div>
+      <div class="item" id="owner-report"><span>🧾</span><div class="grow"><div class="t">Отчёт ${esc(name("m1"))} для овнера</div><div class="s">Excel по дням, как в старой таблице — пришлю в чат</div></div><span class="muted">›</span></div>
+      <div class="item" id="excel"><span>📁</span><div class="grow"><div class="t">Все данные в Excel</div><div class="s">Обе модели, выплаты и месяцы — для себя</div></div></div>
     </div>
     <div class="muted" style="text-align:center;margin:20px 0 8px">Данные хранятся у тебя на ПК · v1.0</div>`;
   $("#g-cur").onclick = () => goalSheet(key);
@@ -398,6 +401,7 @@ function renderMore() {
   $("#names").onclick = namesSheet;
   $("#uah-toggle").onclick = () => { prefs.uah = !prefs.uah; savePrefs(); render(); };
   $("#excel").onclick = () => act("/api/excel", {}, "Отправил таблицу в чат 📁");
+  $("#owner-report").onclick = () => ownerReportSheet(mKey(S.today));
 }
 
 /* ================= шторки ================= */
@@ -425,10 +429,10 @@ function shiftSheet(s) {
     <div class="seg" id="seg">${["m1", "m2"].map((m) => `<button data-m="${m}" class="${m === model ? "on" : ""}"><span class="dot ${m}"></span>${esc(name(m))}</button>`).join("")}</div>
     <div class="field"><label>Дата смены</label><input type="date" id="f-day" value="${s.day}" max="${S.today}"></div>
     ${model === "m1" ? `<div class="fields3">
-      <div class="field"><label>Обычные, $</label><input inputmode="decimal" id="f-reg" placeholder="0" value="${s.regular || ""}"></div>
-      <div class="field"><label>Сабки, $</label><input inputmode="decimal" id="f-subs" placeholder="0" value="${s.subs || ""}"></div>
-      <div class="field"><label>Бандлы, $</label><input inputmode="decimal" id="f-bund" placeholder="0" value="${s.bundles || ""}"></div></div>`
-    : `<div class="field"><label>Продажи, $</label><input inputmode="decimal" id="f-reg" placeholder="0" value="${s.regular || ""}"></div>`}
+      <div class="field"><label>Обычные, $</label><input inputmode="decimal" autocomplete="off" id="f-reg" placeholder="0" value="${s.regular || ""}"></div>
+      <div class="field"><label>Сабки, $</label><input inputmode="decimal" autocomplete="off" id="f-subs" placeholder="0" value="${s.subs || ""}"></div>
+      <div class="field"><label>Бандлы, $</label><input inputmode="decimal" autocomplete="off" id="f-bund" placeholder="0" value="${s.bundles || ""}"></div></div>`
+    : `<div class="field"><label>Продажи, $</label><input inputmode="decimal" autocomplete="off" id="f-reg" placeholder="0" value="${s.regular || ""}"></div>`}
     <div class="preview" id="pv"></div>
     <div class="field"><label>Заметка</label><input id="f-note" maxlength="300" placeholder="например: мало онлайна" value="${esc(s.note || "")}"></div>
     <div class="actions"><button class="btn" id="f-save">${editing ? "Сохранить" : "Добавить"}</button></div>
@@ -449,7 +453,7 @@ function shiftSheet(s) {
     };
     sh.querySelectorAll("input").forEach((i) => i.addEventListener("input", upd));
     sh.querySelectorAll("#seg button").forEach((b) => (b.onclick = () => {
-      s = { ...s, day: $("#f-day", sh).value, regular: numVal($("#f-reg", sh)), note: $("#f-note", sh).value };
+      s = { id: s.id, day: $("#f-day", sh).value, note: "" };   // суммы от другой модели не переносим
       model = b.dataset.m; mount(sh);
     }));
     $("#f-save", sh).onclick = async (e) => {
@@ -514,6 +518,24 @@ function periodSheet(p) {
         await navigator.clipboard.writeText(r.text); toast("Скопировано 📋");
       } catch (e) { toast("Не удалось скопировать — используй «Отчёт в чат»"); }
     };
+  });
+}
+
+async function sendOwnerReport(key) {
+  try {
+    await api("/api/nika_report", { month: key });
+    toast("🧾 Отчёт в чате — перешли его овнеру"); haptic("ok");
+  } catch (e) { toast("⚠️ " + e.message); }
+}
+
+function ownerReportSheet(key) {
+  const prev = shiftMonth(key, -1), prev2 = shiftMonth(key, -2);
+  openSheet(`<h2>🧾 Отчёт ${esc(name("m1"))} для овнера</h2>
+    <div class="muted" style="margin:-6px 4px 14px">Месяц по дням: обычные, сабки, бандлы, сумма за день и за каждый период. Пришлю файл в чат с ботом.</div>
+    <div class="list" style="background:var(--bg2)">${[key, prev, prev2].map((k) => `
+      <div class="item" data-rep="${k}"><span>📄</span><div class="grow"><div class="t">${monthTitle(k)}</div>
+      <div class="s">${money(monthData(k).m1.pay)} · ${monthData(k).m1.shifts} ${plural(monthData(k).m1.shifts, "смена", "смены", "смен")}</div></div><span class="muted">›</span></div>`).join("")}</div>`, (root) => {
+    root.querySelectorAll("[data-rep]").forEach((b) => (b.onclick = async () => { await sendOwnerReport(b.dataset.rep); closeSheet(); }));
   });
 }
 
